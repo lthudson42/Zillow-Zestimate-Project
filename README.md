@@ -2,6 +2,8 @@
 ECO4444 Mid-Term project
 Authors: Liam Hudson and Shyam Patel
 
+To view a comprehensive report of this project, click this [link](https://docs.google.com/document/d/1wsAdmPym7Qb1zBZzKSwvG4mbaPXadfTWoNlhcetCst8/edit?usp=sharing).
+
 In this project, we explore a dataset of property sales data with multiple variables.
 
 * 'price': the final sales price of the property
