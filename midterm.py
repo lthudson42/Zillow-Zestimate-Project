@@ -21,6 +21,7 @@ from sklearn import preprocessing
 from sklearn.model_selection import cross_validate
 from sklearn.linear_model import LinearRegression
 from sklearn.preprocessing import PolynomialFeatures
+from sklearn.metrics import mean_squared_error
 
 import matplotlib.pyplot as plt
 
@@ -39,6 +40,19 @@ data.price = y
 # Store column names
 columns = data.columns
 
+# Add columns in the dataframe with logarithmically-transformed variables
+for col in columns:
+    data['log_' + col] = np.log(data[col] + 1) # adding 1 will prevent taking the logarithms of 0
+# Drop dummy variable pool
+data = data.drop('log_pool', axis = 1)
+
+# Due to domain restrictions with logarithms (i.e., logarithms of 0 and negative numbers are undefined),
+# it is important to check if there are any infinite values and/or NaN values.
+print(np.isinf(data).sum())
+print(data.isna().sum())
+
+# Update columns variable
+columns = data.columns
 
 
 # Loop through each column in the dataset, generate descriptive statistics, and histograms
@@ -63,13 +77,12 @@ for col in columns:
     plt.title('Distribution of ' + col.replace('_', ' ').title())
     plt.show()
     
-    
-# Correlation matrix
+# Correlation matrices
 corr_matrix = data.corr()
 print(corr_matrix)
 
 
-# Using itertools, create a combinations object of all possible variable combos.
+# Using itertools, create a combinations object of non-transformed variable combos.
 x_combos = []
 
 for n in range(1, 11):
@@ -79,13 +92,12 @@ for n in range(1, 11):
     x_combos.extend(combos)
 
 
-
 # Randomize data with seed = 1234
 seed(1234)
 data = data.sample(len(data))
 
 
-# Linear Regression function definition
+# Linear Regression function definitions
 def model(features):
 
     for n in range(0, len(x_combos)):
@@ -111,10 +123,10 @@ def model(features):
     for possibles, i in models.items():
         if i == min_mse:
             print("The variable combinations:", possibles)
+        
+        
 
-
-
-# MODELS 
+# MODELS OF BASE VARIABLES
 
 # PolynomialFeatures = 1
 
@@ -170,32 +182,125 @@ model(5)
     x_coord, y_coord'''
 
 
+# Use itertools to create a series of log variable combinations
+log_combos = []
 
+for n in range(1, 10):
+    combos = combinations(['log_year', 'log_age', 'log_beds', 'log_baths', 
+                           'log_home_size', 'log_parcel_size', 'log_dist_cbd', 
+                           'log_dist_lakes', 'log_x_coord', 'log_y_coord'], n)
+    log_combos.extend(combos)
+    
+# MODELS WITH LOGARITHM VARIABLES
+
+# Poly = 1
+
+log_models = {}
+log_mse = {}
+
+for n in range(0, len(log_combos)):
+    combo_list = list(log_combos[n])
+    x = data[combo_list]
+    model = LinearRegression()
+    cv_scores = cross_validate(model, x, y, cv=10, scoring=('neg_mean_squared_error'))
+    log_mse[str(combo_list)] = np.mean(cv_scores['test_score'])
+
+print("Outcomes from the Best Linear Regression Model:")
+log_min_mse = abs(max(log_mse.values()))
+print("Minimum Average Test MSE:", log_min_mse)
+for possibles, i in log_mse.items():
+    if i == -log_min_mse:
+        print("The Combination of Variables:", possibles)
+        
+'''Minimum Average Test MSE: 20,485.57
+    Variables: log_y_coord'''
+
+# Poly = 2
+
+for n in range(0, len(log_combos)):
+    combo_list = list(log_combos[n])
+    x = data[combo_list]
+    x = sm.add_constant(x)
+        
+    # Polynomial specifications
+    poly = PolynomialFeatures(2)
+    poly_x = poly.fit_transform(x)
+    
+    # Fit model
+    model = sm.OLS(y,poly_x)
+    results = model.fit()
+    
+    # Record MSE
+    log_mse = results.mse_resid
+    log_models[str(combo_list)] = log_mse
+        
+# Print minimum average test MSE
+min_mse = min(log_models.values())
+print("The Minimum MSE:", min_mse)
+for possibles, i in log_models.items():
+    if i == min_mse:
+        print("The variable combinations:", possibles)
+
+'''Minimum Average Test MSE: 20,477.15
+    Variables: log_dist_cbd'''
+    
+# Poly = 3
+
+for n in range(0, len(log_combos)):
+    combo_list = list(log_combos[n])
+    x = data[combo_list]
+    x = sm.add_constant(x)
+        
+    # Polynomial specifications
+    poly = PolynomialFeatures(3)
+    poly_x = poly.fit_transform(x)
+    
+    # Fit model
+    model = sm.OLS(y,poly_x)
+    results = model.fit()
+    
+    # Record MSE
+    log_mse = results.mse_resid
+    log_models[str(combo_list)] = log_mse
+        
+# Print minimum average test MSE
+min_mse = min(log_models.values())
+print("The Minimum MSE:", min_mse)
+for possibles, i in log_models.items():
+    if i == min_mse:
+        print("The variable combinations:", possibles)
+
+'''Minimum Average Test MSE: 20,435.91
+    Variables: log_year, log_beds, log_baths, log_home_size, log_dist_cbd, log_y_coord'''
+
+
+    
 # Create a new variable: home_ratio
 
 data['home_ratio'] = data.home_size / data.parcel_size
+data['log_home_ratio'] = np.log(data.home_ratio)
 
 # Update columns variable
 columns = data.columns
 
 # Generate descriptive statistics
 mean = round(np.mean(data.home_ratio), 2)
+log_mean = round(np.mean(data.log_home_ratio), 2)
 median = round(np.median(data.home_ratio), 2)
+log_median = round(np.median(data.log_home_ratio), 2)
 variance = round(np.var(data.home_ratio), 2)
+log_variance = round(np.var(data.log_home_ratio), 2)
 sd = round(np.std(data.home_ratio), 2)
+log_sd = round(np.std(data.log_home_ratio), 2)
  
 print(f"{data.home_ratio.name} - Mean = {mean}")
+print(f"{data.log_home_ratio.name} - Mean = {log_mean}")
 print(f"{data.home_ratio.name} - Median = {median}")
+print(f"{data.log_home_ratio.name} - Median = {log_median}")
 print(f"{data.home_ratio.name} - Variance = {variance}")
+print(f"{data.log_home_ratio.name} - Variance = {log_variance}")
 print(f"{data.home_ratio.name} - Standard Deviation = {sd}")
- 
-# Create a histogram
-plt.hist(data.home_ratio, bins = 100)
-plt.xlabel(data.home_ratio.name)
-plt.ylabel('Number of Properties')
-plt.title('Distribution of ' + data.home_ratio.name)
-plt.xlim(0,1)
-plt.show()
+print(f"{data.log_home_ratio.name} - Standard Deviation = {log_sd}")
 
 # Re-randomize data with seed = 1234
 seed(1234)
@@ -211,7 +316,7 @@ for n in range(1, 12):
     x_combos.extend(combos)
 
     
-# MODELS 
+# MODELS WITH BASE VARIABLES + home_ratio
 
 # Poly = 1
 
@@ -267,6 +372,7 @@ Minimum Average Test MSE: 19,135
 Variables: year, age, beds, baths, home_size, parcel_size, pool, dist_cbd, dist_lakes, x_coord, y_coord
 '''
 
+    
 
 # New variable: two_baths (does the property have at least 2 bathrooms?)
 
@@ -405,7 +511,6 @@ for exponents, i in mse.items():
     if i == -min_mse:
         print("The Associated Exponent Values:", exponents)     
 
-
 '''
 Minimum average test MSE: 20,480
 Variable/exponent: parcel_size raised to the 1.0 power
@@ -480,18 +585,23 @@ all too much, no matter what non-integer exponents we are raising the features t
 '''
 
 
-
 '''
 We just executed a lot of modeling frameworks. 
 
 To recap:
     * Modeled base dataset (no additional variables) and ran 10-fold cross-validation
       regressions with polynomial features up to 5
+    * Modeled logarithmic transformations of variables and ran 10-fold cross validation
+      regressions with polynomial features up to 3
+    * Modeled all variables (base and log transformations) and ran 10-fold cross validation
+      regressions
     * Created two new variables: home_ratio and two_baths
-        * Ran 10-fold cross validation regressions on the new dataset with polynomial 
-          features up to 5 and 3, respectively
+        * Ran 10-fold cross validation regressions on the base variable dataset with home_ratio
+         with polynomial features up to 5
+        * Ran 10-fold cross validation regressions on the base variable dataset with two_baths polynomial 
+          features up to 3
     * Ran 10-fold cross-validation regressions on base features (excluding dummy variables)
-      with non-integer exponents between 0 and 4 in increments of 0.04
+      with non-integer exponents between 0 and 4 in increments of 0.04 on base variable dataset
       
 
 With all these models, it is time to select the best one.
@@ -500,6 +610,10 @@ LOWEST AVERAGE TEST MSE: 19,135
 VARIABLES (in dataset with just home_ratio): year, age, beds, baths, home_size, 
 parcel_size, pool, dist_cbd, dist_lakes, x_coord, y_coord
 Polynomial Features: 5
+
+The issue with this best model, however, is the risk of overfitting. Polynomial features of 5
+is incredibly complex and comes with risks. To mitigate overfitting and multicollinearity, we
+are instead going to use polynomial features of 3 with the same variables.
 '''
 
 
@@ -510,29 +624,34 @@ data['price'] = data['price']/1000
 data['home_ratio'] = data.home_size / data.parcel_size # must create home_ratio variable as best_model was trained on the dataset with it
 
 x = data[['year', 'age', 'beds', 'baths', 'home_size', 'parcel_size', 'pool', 'dist_cbd', 'dist_lakes', 'x_coord', 'y_coord']]
-poly = PolynomialFeatures(5)
-poly_x = poly.fit_transform(x) # look at columns (x) and map data to all possible combinations (with specified degrees up to 5)
-
-x = pd.DataFrame(poly.fit_transform(x), columns=poly.get_feature_names_out(x.columns))
 y = data['price']
 
-best_model = sm.OLS(y, x)
+poly = PolynomialFeatures(3)
+x_poly = poly.fit_transform(x) # look at columns (x) and map data to all possible combinations (with specified degrees up to 5)
+x_poly = pd.DataFrame(x_poly, columns=poly.get_feature_names_out(x.columns))
+
+best_model = sm.OLS(y, x_poly)
 results = best_model.fit()
 print(results.summary()) # may take a minute to load
 print(results.rsquared) # 0.9096848858299772
-predictions = results.predict(x)
+predictions = results.predict(x_poly)
+train_mse = np.sqrt(np.mean((data.price - predictions)**2))
 
 
 # Introduce new data (validation set)
 
-new_data = read_csv('/Users/liamhudson/Downloads/ucf_classes/eco444_fall_2025/python/data/val_set.csv', delimiter=',')
-new_data['price'] = new_data['price']/1000 
-new_data['home_ratio'] = new_data.home_size / new_data.parcel_size
+new_data = read_csv('/Users/liamhudson/Downloads/ucf_classes/eco444_fall_2025/python/data/mid_term_validation_set.csv', delimiter=',')
+new_data['price'] = new_data['price']/1000
+new_data['home_ratio'] = new_data.home_size / new_data.parcel_size # must create home_ratio variable as best_model was trained on the dataset with it
 
 # Create new poly transformed object to avoid re-fitting of the original
-x_new = new_data[['year', 'age', 'beds', 'baths', 'home_size', 'parcel_size', 
+x_val = new_data[['year', 'age', 'beds', 'baths', 'home_size', 'parcel_size', 
                   'pool', 'dist_cbd', 'dist_lakes', 'x_coord', 'y_coord']]
-poly_new = PolynomialFeatures(5)
-poly_x_new = poly.transform(x_new) # .transform() applies the same mapping that best_model was trained on
+y_val = new_data.price
+x_val_poly = poly.transform(x_val) # .transform() applies the same mapping that best_model was trained on
 
-val_predictions = results.predict(poly_x_new) # obtain predictions
+val_predictions = results.predict(x_val_poly) # obtain predictions
+val_mse = np.sqrt(np.mean((y_val - val_predictions)**2))
+
+print(f"Train MSE: {train_mse:.4f}")
+print(f"Validation MSE: {val_mse:.4f}")
